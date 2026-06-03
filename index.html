@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إدارة العقارات والاستثمار</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        :root {
+            --primary: #1e3a8a;
+            --secondary: #0d9488;
+            --background: #f8fafc;
+            --text: #1e293b;
+            --white: #ffffff;
+            --border: #e2e8f0;
+        }
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: var(--background);
+            color: var(--text);
+            margin: 0;
+            padding: 0;
+        }
+        header {
+            background-color: var(--primary);
+            color: var(--white);
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+        header h1 {
+            margin: 0 0 15px 0;
+            font-size: 24px;
+        }
+        nav button {
+            background-color: transparent;
+            border: 2px solid var(--white);
+            color: var(--white);
+            padding: 8px 16px;
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 6px;
+            margin: 0 5px;
+            transition: all 0.3s ease;
+        }
+        nav button:hover {
+            background-color: var(--white);
+            color: var(--primary);
+        }
+        main {
+            max-width: 800px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+        section {
+            background: var(--white);
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            display: none;
+        }
+        section.active {
+            display: block;
+        }
+        h2 {
+            color: var(--primary);
+            margin-top: 0;
+            border-bottom: 2px solid var(--border);
+            padding-bottom: 10px;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        input, select {
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 15px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        input:focus, select:focus {
+            border-color: var(--secondary);
+        }
+        button[type="submit"] {
+            background-color: var(--secondary);
+            color: var(--white);
+            border: none;
+            padding: 12px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button[type="submit"]:hover {
+            background-color: #0f766e;
+        }
+        ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        li {
+            background: var(--background);
+            padding: 12px 15px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            border-right: 4px solid var(--primary);
+            display: flex;
+            justify-content: space-between;
+        }
+        #calc-result {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>نظام إدارة العقارات والاستثمارات المالية</h1>
+        <nav>
+            <button onclick="showSection('real-estate')">إدارة العقارات</button>
+            <button onclick="showSection('investment')">حاسبة الاستثمار (CME-1)</button>
+        </nav>
+    </header>
+
+    <main>
+        <section id="real-estate" class="active">
+            <h2>إضافة عقار جديد</h2>
+            <form id="property-form">
+                <input type="text" id="prop-title" placeholder="اسم العميل / وصف العقار" required>
+                <input type="number" id="prop-price" placeholder="السعر (بالريال)" required>
+                <select id="prop-type">
+                    <option value="للبيع">للبيع</option>
+                    <option value="للإيجار">للإيجار</option>
+                </select>
+                <button type="submit">حفظ العقار</button>
+            </form>
+            <h3>قائمة العقارات الحالية</h3>
+            <ul id="properties-list"></ul>
+        </section>
+
+        <section id="investment">
+            <h2>حاسبة العائد الاستثماري المالي</h2>
+            <form id="calc-form">
+                <input type="number" id="invest-amount" placeholder="مبلغ الاستثمار الأساسي" required>
+                <input type="number" id="invest-rate" placeholder="نسبة العائد السنوي (%)" required>
+                <input type="number" id="invest-years" placeholder="عدد السنوات" required>
+                <button type="submit">احسب العائد المتوقع</button>
+            </form>
+            <div id="calc-result" style="display:none;"></div>
+        </section>
+    </main>
+
+    <script src="main.js"></script>
+</body>
+</html>
