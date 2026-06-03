@@ -1,0 +1,271 @@
+// ══════════════════════════════════════════════════
+//  COMPLETION OF INBOX OVERLAY & CONTROLS
+// ══════════════════════════════════════════════════
+    +'</div>'
+    +'<div style="color:#94a3b8;font-size:14px;margin-bottom:16px;direction:ltr;text-align:right;font-weight:600">'+x(req.sellerPhone||'')+'</div>'
+    +rowsHtml
+    +(alreadyMoved?'<div style="color:#22c55e;font-size:11px;font-weight:800;text-align:center;margin:10px 0">💡 تم نقل هذا العرض بالفعل إلى القائمة الرئيسية</div>':'')
+    +'<div class="act-row">'
+    +btns
+    +'</div>';
+  document.getElementById('approveOverlay').style.display='flex';
+}
+
+function approveInbox(id){
+  const idx=inbox.findIndex(r=>r.id===id); if(idx===-1) return;
+  inbox[idx].status='approved';
+  const req=inbox[idx];
+  const entry={...req, status:undefined, createdAt:Date.now()};
+  
+  if(req.clientType==='buyer') buyers.unshift(entry);
+  else sellers.unshift(entry);
+  
+  toast('✅ تم اعتماد الطلب ونقله بنجاح');
+  closeOverlay('approveOverlay'); save(); syncCloudInbox();
+}
+
+function reApproveInbox(id){
+  const req=inbox.find(r=>r.id===id); if(!req) return;
+  const entry={...req, status:undefined, createdAt:Date.now()};
+  
+  if(req.clientType==='buyer'){
+    if(!buyers.some(b=>b.id===id)) buyers.unshift(entry);
+  } else {
+    if(!sellers.some(s=>s.id===id)) sellers.unshift(entry);
+  }
+  toast('🔄 تم إعادة نقل العرض للقائمة الرئيسية');
+  closeOverlay('approveOverlay'); save();
+}
+
+function rejectInbox(id){
+  const idx=inbox.findIndex(r=>r.id===id); if(idx===-1) return;
+  inbox[idx].status='rejected';
+  toast('❌ تم رفض الطلب');
+  closeOverlay('approveOverlay'); save(); syncCloudInbox();
+}
+
+function clearProcessed(){
+  if(!confirm('⚠️ هل أنت متأكد من حذف جميع الطلبات المعتمدة والمرفوضة؟')) return;
+  inbox=inbox.filter(i=>i.status==='pending');
+  toast('🗑️ تم تنظيف صندوق الوارد');
+  save(); syncCloudInbox();
+}
+
+function copyClientLink(){
+  const clientUrl=window.location.origin+window.location.pathname.replace('index.html','')+'client.html';
+  copyText(clientUrl); toast('📋 تم نسخ رابط العميل الموحد');
+}
+
+// ══════════════════════════════════════════════════
+//  MATCHING TAB (ALGORITHM)
+// ══════════════════════════════════════════════════
+function renderMatching(){
+  let h='<div style="padding-bottom:18px"><div class="sec-title">🤝 مطابقة العروض والطلبات الذكية</div>'
+    +'<div style="color:var(--muted);font-size:11px;margin-bottom:14px;line-height:1.5">'
+    +'يقوم النظام تلقائياً بتحليل ومطابقة عروض البائعين مع طلبات المشترين بناءً على (المدينة، نوع العقار، الاتجاه، المساحة، والسعر).'
+    +'</div>';
+
+  if(!sellers.length || !buyers.length){
+    return h+'<div class="empty"><div class="e-ic">🤝</div><div class="e-t">لا يمكن إجراء المطابقة</div>'
+      +'<div class="e-s">يجب توفر (عرض بائع واحد وطلب مشتري واحد على الأقل) لإجراء التحليل.</div></div></div>';
+  }
+
+  let matches=[];
+  sellers.forEach(s=>{
+    buyers.forEach(b=>{
+      let score=0, maxScore=0, tags=[];
+      
+      // 1. City Check (Critical)
+      maxScore+=30;
+      if((s.city||'الرياض')===(b.city||'الرياض')){ score+=30; tags.push('🏙️ نفس المدينة'); }
+      else return; // Skip if different cities
+
+      // 2. Property Type Check (Critical)
+      maxScore+=30;
+      if(s.propertyType && b.propertyType && s.propertyType===b.propertyType){ score+=30; tags.push('🏗️ تطابق النوع ('+s.propertyType+')'); }
+      
+      // 3. Direction Check
+      if(b.direction){
+        maxScore+=15;
+        if(s.direction===b.direction){ score+=15; tags.push('📍 نفس الاتجاه ('+s.direction+')'); }
+      }
+
+      // 4. Budget / Price Check
+      maxScore+=25;
+      const price=numVal(s.price);
+      const bMin=b.budgetMin?Number(b.budgetMin):0;
+      const bMax=b.budgetMax?Number(b.budgetMax):Infinity;
+      if(price>=bMin && price<=bMax){ score+=25; tags.push('💰 السعر مناسب للميزانية'); }
+      else if(price>bMax && s.negotiable){
+        const diffPct=((price-bMax)/bMax)*100;
+        if(diffPct<=15){ score+=15; tags.push('💸 السعر أعلى بقليل (قابل للتفاوض)'); }
+      }
+
+      // 5. Area Check
+      if(b.areaMin || b.areaMax){
+        maxScore+=15;
+        const area=Number(s.area||0);
+        const aMin=b.areaMin?Number(b.areaMin):0;
+        const aMax=b.areaMax?Number(b.areaMax):Infinity;
+        if(area>=aMin && area<=aMax){ score+=15; tags.push('📐 المساحة متطابقة'); }
+      }
+
+      let pct=Math.round((score/maxScore)*100);
+      if(pct>=40){
+        matches.push({ seller:s, buyer:b, pct:pct, tags:tags });
+      }
+    });
+  });
+
+  matches.sort((a,b)=>b.pct-a.pct);
+
+  if(!matches.length){
+    h+'<div class="empty"><div class="e-ic">🔍</div><div class="e-t">لم يتم العثور على أي تطابق متوافق حالياً</div></div>';
+  } else {
+    h+='<div style="font-size:11px;color:var(--dim);margin-bottom:8px">'+matches.length+' تطابق ذكي محتمل</div>';
+    matches.forEach(m=>{
+      const scoreColor=m.pct>=75?'#22c55e':m.pct>=50?'#f59e0b':'#3b82f6';
+      h+='<div class="match-card">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center">'
+        +'<span style="font-size:11px;color:var(--muted)">نسبة التوافق</span>'
+        +'<span class="match-score" style="color:'+scoreColor+'">'+m.pct+'%</span>'
+        +'</div>'
+        +'<div class="match-bar"><div class="match-fill" style="width:'+m.pct+'%;background:'+scoreColor+'"></div></div>'
+        
+        +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 0;background:rgba(0,0,0,.2);padding:8px;border-radius:8px">'
+        +'<div onclick="mode=\'sellers\';openDetail(\''+m.seller.id+'\')" style="cursor:pointer;border-left:1px solid var(--border);padding-left:4px">'
+        +'<div style="font-size:10px;color:#f59e0b;font-weight:800">🏷️ عرض البائع</div>'
+        +'<div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+x(m.seller.sellerName)+'</div>'
+        +'<div style="font-size:11px;color:var(--muted)">'+(m.seller.price?fp(m.seller.price)+' ﷼':'—')+'</div>'
+        +'</div>'
+        +'<div onclick="mode=\'buyers\';openDetail(\''+m.buyer.id+'\')" style="cursor:pointer;padding-right:4px">'
+        +'<div style="font-size:10px;color:#10b981;font-weight:800">🛒 طلب المشتري</div>'
+        +'<div style="font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+x(m.buyer.sellerName)+'</div>'
+        +'<div style="font-size:11px;color:var(--muted)">إلى '+(m.buyer.budgetMax?fp(m.buyer.budgetMax)+' ﷼':'—')+'</div>'
+        +'</div>'
+        +'</div>'
+        
+        +'<div style="margin-top:5px">'+m.tags.map(t=>'<span class="match-tag" style="background:'+scoreColor+'15;color:'+scoreColor+';border:1px solid '+scoreColor+'30">'+t+'</span>').join('')+'</div>'
+        +'<div style="display:flex;gap:6px;margin-top:10px">'
+        +'<button class="btn wa-btn b-sm" onclick="openMatchContact(\''+m.seller.sellerPhone+'\',\''+m.buyer.sellerPhone+'\',\''+m.seller.propertyType+'\',\''+m.seller.neighborhood+'\')">📱 اتصال جماعي</button>'
+        +'</div>'
+        +'</div>';
+    });
+  }
+  return h+'</div>';
+}
+
+function openMatchContact(sPhone, bPhone, type, neighborhood){
+  const msg='مرحباً، بخصوص طلبكم لعقار ('+(type||'')+' في '+(neighborhood||'')+') يتوفر لدينا خيار مطابق ومناسب جداً للتفاصيل المذكورة.';
+  window.open('https://wa.me/'+sPhone+'?text='+encodeURIComponent(msg),'_blank');
+}
+
+// ══════════════════════════════════════════════════
+//  STATS & METRICS TAB
+// ══════════════════════════════════════════════════
+function renderStats2(){
+  const sTotal=sellers.length, bTotal=buyers.length;
+  const grandTotal=sTotal+bTotal;
+  
+  let sSum=0; sellers.forEach(s=>{sSum+=numVal(s.price);});
+  let bSum=0; buyers.forEach(b=>{bSum+=numVal(b.budgetMax);});
+
+  let h='<div style="padding-bottom:18px"><div class="sec-title">📊 لوحة الإحصائيات الشاملة</div>';
+  
+  h+='<div class="kpi-grid">'
+    +'<div class="kpi"><div class="kpi-n" style="color:#f59e0b">'+sTotal+'</div><div class="kpi-l">إجمالي العروض (بائع)</div></div>'
+    +'<div class="kpi"><div class="kpi-n" style="color:#10b981">'+bTotal+'</div><div class="kpi-l">إجمالي الطلبات (مشتري)</div></div>'
+    +'<div class="kpi"><div class="kpi-n" style="color:#3b82f6;font-size:16px">'+(sTotal?fp(Math.round(sSum/sTotal))+' ﷼':'—')+'</div><div class="kpi-l">متوسط أسعار المعروض</div></div>'
+    +'<div class="kpi"><div class="kpi-n" style="color:#a855f7;font-size:16px">'+(bTotal?fp(Math.round(bSum/bTotal))+' ﷼':'—')+'</div><div class="kpi-l">متوسط ميزانيات المشترين</div></div>'
+    +'</div>';
+
+  // Distribution by type
+  h+='<div class="sec-div">🏗️ توزيع العقارات حسب النوع</div>'
+    +'<div style="background:var(--surf3);border-radius:12px;overflow:hidden;border:1px solid var(--border)">';
+  TYPES.forEach(t=>{
+    const sCount=sellers.filter(o=>o.propertyType===t).length;
+    const bCount=buyers.filter(o=>o.propertyType===t).length;
+    const max=Math.max(...TYPES.map(type=>sellers.filter(o=>o.propertyType===type).length + buyers.filter(o=>o.propertyType===type).length),1);
+    const pct=Math.round(((sCount+bCount)/max)*100);
+    
+    h+='<div class="bar-row">'
+      +'<div style="width:55px;font-size:12px;font-weight:800">'+t+'</div>'
+      +'<div class="bar-track">'
+        +'<div class="bar-fill" style="width:'+pct+'%;background:linear-gradient(90deg, #10b981, #f59e0b)"></div>'
+      +'</div>'
+      +'<div style="font-size:10px;color:var(--muted);width:55px;text-align:left">'
+      +'🏷️'+sCount+' | 🛒'+bCount
+      +'</div>'
+      +'</div>';
+  });
+  h+='</div>';
+
+  h+='<div style="margin-top:14px;display:flex;gap:7px">'
+    +'<button class="btn b-red b-sm" onclick="clearAll()">🗑️ مسح القائمة الحالية ('+(mode==='sellers'?'البائعين':'المشترين')+')</button>'
+    +'</div></div>';
+  return h;
+}
+
+// ══════════════════════════════════════════════════
+//  IMPORT / EXPORT IMPLEMENTATION
+// ══════════════════════════════════════════════════
+function exportJSON(){
+  const out={ sellers:sellers, buyers:buyers, exportedAt:Date.now() };
+  dl(JSON.stringify(out,null,2), 'application/json', 'عقارات_نسخة_احتياطية_'+dateStr()+'.json');
+  toast('📥 تم تصدير ملف الـ JSON بنجاح');
+}
+
+function openImport(){ document.getElementById('importOverlay').style.display='flex'; }
+
+function doImport(input){
+  if(!input.files||!input.files[0]) return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      const data=JSON.parse(e.target.result);
+      let addedS=0, addedB=0;
+      if(data.sellers && Array.isArray(data.sellers)){
+        data.sellers.forEach(s=>{ if(!sellers.some(x=>x.id===s.id)){ sellers.push(s); addedS++; } });
+      }
+      if(data.buyers && Array.isArray(data.buyers)){
+        data.buyers.forEach(b=>{ if(!buyers.some(x=>x.id===b.id)){ buyers.push(b); addedB++; } });
+      }
+      toast('✅ استيراد ناجح (تم دمج +'+addedS+' بائع، +'+addedB+' مشتري)');
+      closeOverlay('importOverlay'); save();
+    }catch(err){ toast('❌ ملف JSON غير صالح أو تالف','err'); }
+  };
+  reader.readAsText(input.files[0]);
+  input.value='';
+}
+
+function exportCSV(){
+  const isBuyer=mode==='buyers';
+  const data=currentData();
+  let csv='\ufeff'; // UTF-8 BOM
+  
+  if(!isBuyer){
+    csv+='الرقم,الاسم,الجوال,المدينة,الاتجاه,الحي,النوع,المساحة,عرض الشارع,السعر,قابل للتفاوض,الملاحظات\n';
+    data.forEach((o,i)=>{
+      csv+=[i+1, o.sellerName, o.sellerPhone, o.city||'الرياض', o.direction, o.neighborhood, o.propertyType, o.area, o.streetWidth, o.price, o.negotiable?'نعم':'لا', o.notes]
+        .map(v=>'"'+String(v||'').replace(/"/g,'""')+'"').join(',')+'\n';
+    });
+  } else {
+    csv+='الرقم,الاسم,الجوال,المدينة,الاتجاه المفضل,الحي,النوع المطلوب,الميزانية الأدنى,الميزانية الأعلى,المساحة الأدنى,المساحة الأعلى,الملاحظات\n';
+    data.forEach((o,i)=>{
+      csv+=[i+1, o.sellerName, o.sellerPhone, o.city||'الرياض', o.direction, o.neighborhood, o.propertyType, o.budgetMin, o.budgetMax, o.areaMin, o.areaMax, o.notes]
+        .map(v=>'"'+String(v||'').replace(/"/g,'""')+'"').join(',')+'\n';
+    });
+  }
+  
+  const fileName=isBuyer?'طلبات_المشترين_':'عروض_البائعين_';
+  dl(csv, 'text/csv;charset=utf-8;', fileName+dateStr()+'.csv');
+  toast('📊 تم تحميل ملف الـ CSV بنجاح');
+}
+
+// ══════════════════════════════════════════════════
+//  START ON PAGE LOAD
+// ══════════════════════════════════════════════════
+window.onload = init;
+</script>
+</body>
+</html>
